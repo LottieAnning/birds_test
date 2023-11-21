@@ -10,36 +10,141 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(here)
 library(tidyverse)
+library(dada2)
+library(Rcpp)
+library(ggplot2)
 ```
 
 ## Introduction
 
-Write some text here about what you are doing. Show the code for reading in the `birds.csv` file. Explain the data and where it is from.
+First read in the csv file called 'birds.csv' located in your home directory by assigning it to the variable 'birds'. Then show the first 6 rows of data by using the head() function. As you can see the data has many columns shown in the ## row.
 
-```{r code_block1}
-# add some code
+```{r}
+birds <- read.csv("./birds.csv")
+head(birds)
 ```
 
 ## Plotting size relationships
 
-Here I want you to plot the relationship between [tarsus length](https://en.wikipedia.org/wiki/Bird_measurement#Tarsus) and [wing length](https://en.wikipedia.org/wiki/Bird_measurement#Wing). Write some text explaining the plot. Show your code.
+Plot the relationship between tarsus length and wing length, note that these are capitalized and separated with full stops in the raw data. There are also 10328 rows which contain 'NA' values which the 'na.rm' argument surpasses.
 
-Are there any outliers with a very long tarsus but very short wings? Can you identify them? Hint, you can use `filter` to do this, `pull(Species2_ebird)` will give the species name from the [eBird database](https://ebird.org/home) - but you can use any of the species names columns for this.
+```{r birds, echo = T, eval = T}
+ggplot(birds, aes(Tarsus.Length, Wing.Length))+
+  geom_point(na.rm = TRUE)
+```
+
+Taking a further look at the outliers - there are some birds with wing length near 0mm with longer tarsus. To discover what these are run the below code. It returns 18 different species of kiwi - a flightless bird which makes sense to why it has short wings and longer legs.
+
+```{r, echo=TRUE, eval=TRUE}
+birds %>% 
+  filter(Wing.Length < 10) %>%
+  select(Species2_eBird, Tarsus.Length, Wing.Length)
+```
 
 ## Write a function
 
-Nearly all of the phenotypic measurements in this dataset are in millimetres. Write a function to convert them to centimetres. Show the code below. 
+Nearly all of the phenotypic measurements in this dataset are in millimetres. The function below converts them to centimetres. 
+
+```{r, echo=TRUE, eval=TRUE}
+selected_columns <- c("Beak.Length_Culmen", "Beak.Length_Nares", "Beak.Width", "Beak.Depth", "Tarsus.Length", "Wing.Length", "Kipps.Distance", "Secondary1", "Hand.wing.Index", "Tail.Length")
+
+birds_cm <- birds %>%
+  select(all_of(selected_columns)) %>%
+  mutate(across(everything(), ~./10, .names = "cm_{.col}"))
+
+head(birds_cm)
+```
 
 ## Some bird queries
 
-Which bird has the longest beak? Does it differ between culmen (from base of beak entering skull) or nares (from the nostril) measurements? Show the code below and make sure you return **only the top hits** from each measurement - nb. `head()` will help here.
+Which bird has the longest beak? Does it differ between culmen (from base of beak entering skull) or nares (from the nostril) measurements? 
+
+First create a variable called 'beak_length' to concatinate the culmen length column into a vector, then create a vector called 'culmen' to work out the maximum value from this vector, then filter out this value in the culmen length column and select the species to return the species that has the largest culmen. Repeat this for nares (nostrils). Both return the Pelecanus conspicillatus which is the pelecan which makes sense, so no it doesnt differ between the culmen and nares - the longest beak is the same.
+
+```{r, echo=TRUE, eval=TRUE}
+beak_length <- c(birds$Beak.Length_Culmen, na.rm = T)
+culmen <- max(beak_length, na.rm = T)
+
+birds %>% 
+  filter(Beak.Length_Culmen == culmen) %>%
+  select(Species2_eBird, Beak.Length_Culmen)
+
+beak_length <- c(birds$Beak.Length_Nares, na.rm = T)
+nares <- max(beak_length, na.rm = T)
+
+birds %>% 
+  filter(Beak.Length_Nares == nares) %>%
+  select(Species2_eBird, Beak.Length_Nares)
+```
 
 ## Crows, ravens and magpies
 
-Filter your dataset to include only common crows (*Corvus corone*), ravens (*Corvus corax*) and magpies (*Pica pica*). The code below is intended as a hint:
+Filter your dataset into a variable to include only common crows (*Corvus corone*), ravens (*Corvus corax*) and magpies (*Pica pica*) beak length (culmen) and beak depth:
 
-```{r code_block2, echo = TRUE, eval = FALSE}
-filter(species == "A" | species == "B" | species == "C") 
+```{r, echo = TRUE, eval = TRUE}
+crows_ravens_and_magpies <- birds %>%
+  filter(Species2_eBird == "Corvus corone" | Species2_eBird == "Corvus corax" | Species2_eBird == "Pica pica") %>%
+  select(Species2_eBird, Beak.Length_Culmen, Beak.Depth)
 ```
 
-Now draw a `ggplot2` boxplot of the beak length and depth distributions of these samples. Which species has the deepest beak? And which has the longest? **NB. Use culmen length here**
+Now draw a `ggplot2` boxplot of this data:
+
+```{r, echo=TRUE, eval=TRUE}
+ggplot(crows_ravens_and_magpies, aes(x = Species2_eBird, y = Beak.Length_Culmen, fill = Species2_eBird)) +
+  geom_boxplot(na.rm = T) +
+  labs(title = "Boxplot of Beak Length by Species", x = "Species", y = "Beak Length") +
+  scale_fill_manual(values = c("Corvus corone" = "darkseagreen", "Corvus corax" = "cadetblue3", "Pica pica" = "darkorchid"))+
+  scale_x_discrete(labels = c("Corvus corone" = "Crows", "Corvus corax" = "Ravens", "Pica pica" = "Magpies")) +
+  guides(fill = guide_legend(title = "Species"))
+
+ggplot(crows_ravens_and_magpies, aes(x = Species2_eBird, y = Beak.Depth, fill = Species2_eBird)) +
+  geom_boxplot(na.rm = T) +
+  labs(title = "Boxplot of Beak Depth by Species", x = "Species", y = "Beak Depth") +
+  scale_fill_manual(values = c("Corvus corone" = "darkseagreen", "Corvus corax" = "cadetblue3", "Pica pica" = "darkorchid"))+
+  scale_x_discrete(labels = c("Corvus corone" = "Crows", "Corvus corax" = "Ravens", "Pica pica" = "Magpies")) +
+  guides(fill = guide_legend(title = "Species"))
+```
+
+As you can see I could only change the x axis labels to their common species names however when I tried changing the legend labels they were in alphabetical order which caused more confusion.
+
+From the data its clear to see that the Ravens have the longest and deepest beaks and with the largest variation.
+
+To double check this:
+```{r, echo=TRUE, eval=TRUE}
+crows_ravens_and_magpies %>%
+  group_by(Species2_eBird) %>%
+  summarise_at(vars(Beak.Length_Culmen, Beak.Depth), mean, na.rm = T)
+```
+Which makes sense
+
+As a last note, there are variations in the number of counts for each Species:
+```{r, echo=FALSE, eval=TRUE}
+crows_ravens_and_magpies %>%
+  group_by(Species2_eBird) %>%
+  tally()
+```
+So the Ravens variation could be beacuse there were more data counts taken.
+
+*NB the count is for both Beak length and depth, i.e. there were 46 measurements for Raven Beak Length and 46 measurements for Raven Beak Depths taken*
+
+Furthermore there were some missing values:
+```{r, echo=FALSE, eval=TRUE}
+crows_ravens_and_magpies %>%
+  group_by(Species2_eBird) %>%
+  summarise(
+    BeakLength_NA = sum(is.na(Beak.Length_Culmen)),
+    BeakDepth_NA = sum(is.na(Beak.Depth))
+  )
+```
+Therefore the actual counts for each species and measurement are:
+```{r, echo=FALSE, eval=TRUE}
+crows_ravens_and_magpies %>%
+  group_by(Species2_eBird) %>%
+  summarise(
+    BeakLength_NotNA = sum(!is.na(Beak.Length_Culmen)),
+    BeakDepth_NotNA = sum(!is.na(Beak.Depth))
+  )
+```
+Which is just worth being aware of because this could impact the look of the data.
+
+### Congrats, you're at the end :)
